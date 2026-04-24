@@ -1,5 +1,5 @@
 <template>
-  <q-page class="bg-dark text-white column window-height no-wrap overflow-hidden">
+  <q-page class="bg-dark text-white column no-wrap overflow-hidden" :style-fn="pageStyle">
     <div class="q-pa-md row items-center justify-between col-auto">
       <div class="row items-center">
           <q-icon name="terminal" size="2em" color="primary" class="q-mr-sm" />
@@ -32,11 +32,29 @@
                 </q-item>
                 <q-item tag="label" v-ripple>
                   <q-item-section>
+                    <q-item-label>Trim Whitespace</q-item-label>
+                    <q-item-label caption class="text-grey-5">Remove leading spaces from prose</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-toggle v-model="options.trimWhitespace" color="primary" />
+                  </q-item-section>
+                </q-item>
+                <q-item tag="label" v-ripple>
+                  <q-item-section>
                     <q-item-label>Smart Un-wrap</q-item-label>
                     <q-item-label caption class="text-grey-5">Fix artificially broken lines</q-item-label>
                   </q-item-section>
                   <q-item-section side>
                     <q-toggle v-model="options.smartUnwrap" color="primary" />
+                  </q-item-section>
+                </q-item>
+                <q-item tag="label" v-ripple>
+                  <q-item-section>
+                    <q-item-label>Trim Whitespace</q-item-label>
+                    <q-item-label caption class="text-grey-5">Remove leading spaces from prose</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-toggle v-model="options.trimWhitespace" color="primary" />
                   </q-item-section>
                 </q-item>
                 <q-item tag="label" v-ripple>
@@ -113,27 +131,21 @@
 
         <template v-slot:after>
           <div class="full-height column bg-grey-10 overflow-hidden">
-            <div class="row items-center q-pa-none bg-grey-9 border-bottom" style="flex-shrink: 0">
-              <q-tabs v-model="rightTab" dense active-color="white" indicator-color="primary" align="left" narrow-indicator class="text-grey-5" no-caps>
-                <q-tab name="preview" label="Preview" />
-                <q-tab name="source" label="Source" />
-              </q-tabs>
+            <div class="q-pa-sm bg-grey-9 text-caption text-grey-5 border-bottom" style="flex-shrink: 0">CLEANED MARKDOWN</div>
+            <textarea
+              readonly
+              :value="cleanedMarkdown"
+              class="col full-width q-pa-md bg-dark text-white"
+              style="font-family: monospace; resize: none; outline: none; border: none; white-space: pre-wrap; overflow: auto; min-height: 0;"
+              tabindex="0"
+              @keydown="handlePreviewKeydown"
+            ></textarea>
+            <div class="row justify-end items-center q-pa-xs bg-grey-9 text-caption text-grey-5" style="border-top: 1px solid rgba(255,255,255,0.1); flex-shrink: 0; font-size: 11px;">
+              <span class="q-mr-md" title="Lines"><q-icon name="format_list_numbered" class="q-mr-xs"/>{{ lineCount }} lines</span>
+              <span class="q-mr-md" title="Words"><q-icon name="text_snippet" class="q-mr-xs"/>{{ wordCount }} words</span>
+              <span class="q-mr-md" title="Characters"><q-icon name="text_fields" class="q-mr-xs"/>{{ charCount }} chars</span>
+              <span class="q-mr-sm" title="Reading Time"><q-icon name="schedule" class="q-mr-xs"/>{{ readingTime }}</span>
             </div>
-            <q-tab-panels v-model="rightTab" animated class="col bg-transparent overflow-hidden" keep-alive>
-              <q-tab-panel name="preview" class="q-pa-md scroll markdown-preview" tabindex="0" @keydown="handlePreviewKeydown">
-                <div v-html="renderedHtml" style="word-wrap: break-word; overflow-wrap: break-word; min-height: 0;"></div>
-              </q-tab-panel>
-              <q-tab-panel name="source" class="q-pa-none overflow-hidden column">
-                <textarea
-                  readonly
-                  :value="cleanedMarkdown"
-                  class="col full-width q-pa-md bg-dark text-white"
-                  style="font-family: monospace; resize: none; outline: none; border: none; white-space: pre-wrap; overflow: auto; min-height: 0;"
-                  tabindex="0"
-                  @keydown="handlePreviewKeydown"
-                ></textarea>
-              </q-tab-panel>
-            </q-tab-panels>
           </div>
         </template>
       </q-splitter>
@@ -143,23 +155,42 @@
 <script setup>
 import { ref, computed, watch, reactive } from 'vue';
 import { copyToClipboard as qCopyToClipboard, useQuasar, exportFile } from 'quasar';
-import MarkdownIt from 'markdown-it';
 
 const $q = useQuasar();
-const md = new MarkdownIt({
-  html: true,
-  linkify: true,
-  typographer: true
-});
+
+const pageStyle = (offset, height) => ({ height: `${height - offset}px` });
 
 const rawInput = ref('');
 const cleanedMarkdown = ref('');
 const splitterModel = ref(50);
-const rightTab = ref('preview');
+
+const wordCount = computed(() => {
+  if (!cleanedMarkdown.value) return 0;
+  return cleanedMarkdown.value.trim().split(/\s+/).filter(w => w.length > 0).length;
+});
+
+const charCount = computed(() => {
+  return cleanedMarkdown.value.length;
+});
+
+const lineCount = computed(() => {
+  if (!cleanedMarkdown.value) return 0;
+  return cleanedMarkdown.value.split('\n').length;
+});
+
+const readingTime = computed(() => {
+  const wordsPerMinute = 200;
+  const minutes = wordCount.value / wordsPerMinute;
+  if (minutes < 1) {
+    return '< 1 min read';
+  }
+  return Math.ceil(minutes) + ' min read';
+});
 
 const options = reactive({
   stripAnsi: true,
   stripFrames: true,
+  trimWhitespace: true,
   smartUnwrap: true,
   formatPrompts: true,
   stripLineNumbers: true,
@@ -233,7 +264,7 @@ const cleanText = (text) => {
 
   // 5. Handle as Prose (Your existing un-wrap logic goes here)
   for (let i = 0; i < lines.length; i++) {
-    let line = lines[i].trimEnd();
+    let line = options.trimWhitespace ? lines[i].trim() : lines[i].trimEnd();
     
     // Skip completely empty lines if we already have one
     if (line === '' && processedLines.length > 0 && processedLines[processedLines.length-1] === '') {
@@ -275,7 +306,7 @@ const cleanText = (text) => {
 
     // Intelligence: Don't merge if it looks like code or a diff
     const isDiffLine = /^[+-] /.test(line.trimStart());
-    const looksLikeCode = /[;{}()[\]]/.test(line) || lineNumberRegex.test(line);
+    const looksLikeCode = /[{}]|;\s*$/.test(line) || lineNumberRegex.test(line);
 
     if (options.smartUnwrap && i < lines.length - 1) {
       const nextLine = lines[i+1].trimStart();
@@ -309,23 +340,10 @@ watch([rawInput, options], () => {
   cleanedMarkdown.value = cleanText(rawInput.value);
 }, { deep: true });
 
-const renderedHtml = computed(() => {
-  return md.render(cleanedMarkdown.value || '_No output yet..._');
-});
-
 const handlePreviewKeydown = (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
     e.preventDefault();
-    if (e.target.tagName.toLowerCase() === 'textarea') {
-      e.target.select();
-    } else {
-      const selection = window.getSelection();
-      const range = document.createRange();
-      // Select the actual wrapper div containing the HTML to better capture list styles in some browsers
-      range.selectNode(e.currentTarget.firstElementChild || e.currentTarget);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
+    e.target.select();
   }
 };
 
@@ -362,30 +380,6 @@ const clearAll = () => {
 </script>
 
 <style lang="scss">
-.markdown-preview {
-  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  line-height: 1.6;
-  
-  pre {
-    background: rgba(0,0,0,0.3);
-    padding: 12px;
-    border-radius: 4px;
-    overflow-x: auto;
-    border: 1px solid rgba(255,255,255,0.1);
-  }
-  
-  code {
-    font-family: 'Fira Code', monospace;
-    background: rgba(255,255,255,0.1);
-    padding: 2px 4px;
-    border-radius: 3px;
-  }
-
-  p {
-    margin-bottom: 1em;
-  }
-}
-
 .border-bottom {
   border-bottom: 1px solid rgba(255,255,255,0.1);
 }
