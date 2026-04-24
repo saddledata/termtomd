@@ -113,8 +113,27 @@
 
         <template v-slot:after>
           <div class="full-height column bg-grey-10 overflow-hidden">
-            <div class="q-pa-sm bg-grey-9 text-caption text-grey-5 border-bottom" style="flex-shrink: 0">MARKDOWN PREVIEW</div>
-            <div class="col q-pa-md scroll markdown-preview" v-html="renderedHtml" style="word-wrap: break-word; overflow-wrap: break-word; min-height: 0;"></div>
+            <div class="row items-center q-pa-none bg-grey-9 border-bottom" style="flex-shrink: 0">
+              <q-tabs v-model="rightTab" dense active-color="white" indicator-color="primary" align="left" narrow-indicator class="text-grey-5" no-caps>
+                <q-tab name="preview" label="Preview" />
+                <q-tab name="source" label="Source" />
+              </q-tabs>
+            </div>
+            <q-tab-panels v-model="rightTab" animated class="col bg-transparent overflow-hidden" keep-alive>
+              <q-tab-panel name="preview" class="q-pa-md scroll markdown-preview" tabindex="0" @keydown="handlePreviewKeydown">
+                <div v-html="renderedHtml" style="word-wrap: break-word; overflow-wrap: break-word; min-height: 0;"></div>
+              </q-tab-panel>
+              <q-tab-panel name="source" class="q-pa-none overflow-hidden column">
+                <textarea
+                  readonly
+                  :value="cleanedMarkdown"
+                  class="col full-width q-pa-md bg-dark text-white"
+                  style="font-family: monospace; resize: none; outline: none; border: none; white-space: pre-wrap; overflow: auto; min-height: 0;"
+                  tabindex="0"
+                  @keydown="handlePreviewKeydown"
+                ></textarea>
+              </q-tab-panel>
+            </q-tab-panels>
           </div>
         </template>
       </q-splitter>
@@ -136,6 +155,7 @@ const md = new MarkdownIt({
 const rawInput = ref('');
 const cleanedMarkdown = ref('');
 const splitterModel = ref(50);
+const rightTab = ref('preview');
 
 const options = reactive({
   stripAnsi: true,
@@ -176,11 +196,15 @@ const cleanText = (text) => {
 
   // 3. Identify if this is a Code/Diff block
   const codeSignals = (clean.match(/[{()[\];=<>]/g) || []).length;
-  // Check for diff indicators: line starting with optional number, then + or -
-  const isDiff = lines.some(l => {
+  // Check for diff indicators: must have both + and - lines to confidently be a diff, not just a bulleted list
+  let hasPlus = false;
+  let hasMinus = false;
+  for (const l of lines) {
     const trimmed = l.trimStart();
-    return /^(?:\d+\s+)?[+-]\s/.test(trimmed);
-  });
+    if (/^(?:\d+\s+)?\+\s/.test(trimmed)) hasPlus = true;
+    if (/^(?:\d+\s+)?-\s/.test(trimmed)) hasMinus = true;
+  }
+  const isDiff = hasPlus && hasMinus;
   const isCode = codeSignals > (lines.length * 0.5); // Heuristic
 
   // If Smart Unwrap is disabled, we don't need to treat code/prose differently for merging
@@ -189,8 +213,8 @@ const cleanText = (text) => {
     const cleanLines = lines.map(line => {
       let processed = line;
       if (options.stripLineNumbers) {
-        // Strip line numbers and keep +/- if present
-        processed = processed.replace(/^[ \t]*\d+[ \t]*([-+]?)[ \t]*/, (match, p1) => {
+        // Strip line numbers: must be followed by space, pipe, or +/- to avoid breaking ordered lists (1.)
+        processed = processed.replace(/^[ \t]*\d+(?:[ \t]+|[ \t]*[│|:][ \t]*|[ \t]*([-+])[ \t]+)/, (match, p1) => {
           return p1 ? p1 + ' ' : '';
         });
       }
@@ -255,16 +279,18 @@ const cleanText = (text) => {
 
     if (options.smartUnwrap && i < lines.length - 1) {
       const nextLine = lines[i+1].trimStart();
-      const endsWithSentenceEnder = /[.!?:)\]]$/.test(line.trimEnd());
+      // Only treat terminal punctuation (.!?) as hard breaks, ignoring ) or ]
+      const endsWithSentenceEnder = /[.!?]$/.test(line.trimEnd());
       const nextStartsPrompt = promptRegex.test(nextLine);
       const nextIsEmpty = nextLine === '';
       const nextIsDiff = /^[+-] /.test(nextLine);
       const nextIsLineNumber = lineNumberRegex.test(nextLine);
+      const isListItem = /^(?:[-*]|\d+\.)\s/.test(nextLine);
 
       // CRITICAL: If current or next line looks like code/diff/line-number, DO NOT MERGE
-      if (!isDiffLine && !looksLikeCode && !nextIsDiff && !nextIsLineNumber && 
+      if (!isDiffLine && !looksLikeCode && !nextIsDiff && !nextIsLineNumber && !isListItem &&
           !endsWithSentenceEnder && (!options.formatPrompts || !nextStartsPrompt) && !nextIsEmpty && 
-          (line.length > 40)) {
+          (line.trim().length > 40)) {
         line = line.trimEnd() + ' ' + nextLine.trimStart();
         i++; 
         lines[i] = line;
@@ -286,6 +312,22 @@ watch([rawInput, options], () => {
 const renderedHtml = computed(() => {
   return md.render(cleanedMarkdown.value || '_No output yet..._');
 });
+
+const handlePreviewKeydown = (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+    e.preventDefault();
+    if (e.target.tagName.toLowerCase() === 'textarea') {
+      e.target.select();
+    } else {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      // Select the actual wrapper div containing the HTML to better capture list styles in some browsers
+      range.selectNode(e.currentTarget.firstElementChild || e.currentTarget);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  }
+};
 
 const copyToClipboard = async () => {
   try {
