@@ -1,8 +1,7 @@
 <template>
-  <q-page class="q-pa-md bg-dark text-white">
-    <div class="column full-height" style="height: calc(100vh - 100px);">
-      <div class="row items-center justify-between q-mb-md">
-        <div class="row items-center">
+  <q-page class="bg-dark text-white column window-height no-wrap overflow-hidden">
+    <div class="q-pa-md row items-center justify-between col-auto">
+      <div class="row items-center">
           <q-icon name="terminal" size="2em" color="primary" class="q-mr-sm" />
           <div class="text-h5 text-weight-bold q-mr-md">TermToMD</div>
           <q-badge outline color="positive" label="100% Client-Side (Private)" class="q-py-xs" />
@@ -96,34 +95,29 @@
 
       <q-splitter
         v-model="splitterModel"
-        class="col shadow-2 rounded-borders overflow-hidden"
-        style="border: 1px solid rgba(255,255,255,0.1)"
+        class="col shadow-2 rounded-borders overflow-hidden q-mx-md q-mb-md"
+        style="border: 1px solid rgba(255,255,255,0.1); width: auto;"
         :limits="[20, 80]"
       >
         <template v-slot:before>
-          <div class="full-height column">
-            <div class="q-pa-sm bg-grey-10 text-caption text-grey-5 border-bottom">RAW TERMINAL OUTPUT</div>
-            <q-input
+          <div class="full-height column overflow-hidden">
+            <div class="q-pa-sm bg-grey-10 text-caption text-grey-5 border-bottom" style="flex-shrink: 0">RAW TERMINAL OUTPUT</div>
+            <textarea
               v-model="rawInput"
-              type="textarea"
-              filled
-              dark
-              square
-              class="col custom-textarea"
+              class="col full-width q-pa-md bg-dark text-white"
+              style="font-family: monospace; resize: none; outline: none; border: none; white-space: pre; overflow: auto; min-height: 0;"
               placeholder="Paste your mangled terminal mess here..."
-              input-style="font-family: monospace; height: 100%;"
-            />
+            ></textarea>
           </div>
         </template>
 
         <template v-slot:after>
-          <div class="full-height column bg-grey-10">
-            <div class="q-pa-sm bg-grey-9 text-caption text-grey-5 border-bottom">MARKDOWN PREVIEW</div>
-            <div class="col q-pa-md scroll markdown-preview" v-html="renderedHtml"></div>
+          <div class="full-height column bg-grey-10 overflow-hidden">
+            <div class="q-pa-sm bg-grey-9 text-caption text-grey-5 border-bottom" style="flex-shrink: 0">MARKDOWN PREVIEW</div>
+            <div class="col q-pa-md scroll markdown-preview" v-html="renderedHtml" style="word-wrap: break-word; overflow-wrap: break-word; min-height: 0;"></div>
           </div>
         </template>
       </q-splitter>
-    </div>
   </q-page>
 </template>
 
@@ -326,31 +320,6 @@ const clearAll = () => {
 </script>
 
 <style lang="scss">
-.custom-textarea {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-
-  .q-field__inner {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .q-field__control, .q-field__control-container {
-    height: 100% !important;
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
-  }
-  
-  textarea.q-field__native {
-    resize: none !important;
-    height: 100% !important;
-    flex-grow: 1;
-  }
-}
-
 .markdown-preview {
   font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   line-height: 1.6;
