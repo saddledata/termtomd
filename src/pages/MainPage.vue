@@ -1,0 +1,381 @@
+<template>
+  <q-page class="q-pa-md bg-dark text-white">
+    <div class="column full-height" style="height: calc(100vh - 100px);">
+      <div class="row items-center justify-between q-mb-md">
+        <div class="row items-center">
+          <q-icon name="terminal" size="2em" color="primary" class="q-mr-sm" />
+          <div class="text-h5 text-weight-bold q-mr-md">TermToMD</div>
+          <q-badge outline color="positive" label="100% Client-Side (Private)" class="q-py-xs" />
+        </div>
+        <div class="row q-gutter-sm items-center">
+          <!-- Configuration Options Toggle -->
+          <q-btn flat dense icon="settings" color="primary">
+            <q-menu>
+              <q-list style="min-width: 250px" class="bg-dark text-white">
+                <q-item-label header class="text-grey-5">Processing Options</q-item-label>
+                <q-item tag="label" v-ripple>
+                  <q-item-section>
+                    <q-item-label>Strip ANSI Codes</q-item-label>
+                    <q-item-label caption class="text-grey-5">Remove color/formatting codes</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-toggle v-model="options.stripAnsi" color="primary" />
+                  </q-item-section>
+                </q-item>
+                <q-item tag="label" v-ripple>
+                  <q-item-section>
+                    <q-item-label>Strip Terminal Frames</q-item-label>
+                    <q-item-label caption class="text-grey-5">Remove vertical bars (│)</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-toggle v-model="options.stripFrames" color="primary" />
+                  </q-item-section>
+                </q-item>
+                <q-item tag="label" v-ripple>
+                  <q-item-section>
+                    <q-item-label>Smart Un-wrap</q-item-label>
+                    <q-item-label caption class="text-grey-5">Fix artificially broken lines</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-toggle v-model="options.smartUnwrap" color="primary" />
+                  </q-item-section>
+                </q-item>
+                <q-item tag="label" v-ripple>
+                  <q-item-section>
+                    <q-item-label>Format Prompts</q-item-label>
+                    <q-item-label caption class="text-grey-5">Wrap commands in code blocks</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-toggle v-model="options.formatPrompts" color="primary" />
+                  </q-item-section>
+                </q-item>
+                <q-item tag="label" v-ripple>
+                  <q-item-section>
+                    <q-item-label>Strip Prompts</q-item-label>
+                    <q-item-label caption class="text-grey-5">Remove bash/shell prompts ($, >)</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-toggle v-model="options.stripPrompts" color="primary" />
+                  </q-item-section>
+                </q-item>
+                <q-item tag="label" v-ripple>
+                  <q-item-section>
+                    <q-item-label>Strip Line Numbers</q-item-label>
+                    <q-item-label caption class="text-grey-5">Remove gutters from code/diffs</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-toggle v-model="options.stripLineNumbers" color="primary" />
+                  </q-item-section>
+                </q-item>
+              </q-list>
+            </q-menu>
+          </q-btn>
+          <q-btn
+            color="primary"
+            icon="content_copy"
+            label="Copy Markdown"
+            @click="copyToClipboard"
+            :disable="!cleanedMarkdown"
+          />
+          <q-btn
+            color="secondary"
+            icon="download"
+            label="Download .md"
+            @click="downloadMarkdown"
+            :disable="!cleanedMarkdown"
+          />
+          <q-btn
+            color="negative"
+            flat
+            icon="delete"
+            label="Clear"
+            @click="clearAll"
+          />
+        </div>
+      </div>
+
+      <q-splitter
+        v-model="splitterModel"
+        class="col shadow-2 rounded-borders overflow-hidden"
+        style="border: 1px solid rgba(255,255,255,0.1)"
+        :limits="[20, 80]"
+      >
+        <template v-slot:before>
+          <div class="full-height column">
+            <div class="q-pa-sm bg-grey-10 text-caption text-grey-5 border-bottom">RAW TERMINAL OUTPUT</div>
+            <q-input
+              v-model="rawInput"
+              type="textarea"
+              filled
+              dark
+              square
+              class="col custom-textarea"
+              placeholder="Paste your mangled terminal mess here..."
+              input-style="font-family: monospace; height: 100%;"
+            />
+          </div>
+        </template>
+
+        <template v-slot:after>
+          <div class="full-height column bg-grey-10">
+            <div class="q-pa-sm bg-grey-9 text-caption text-grey-5 border-bottom">MARKDOWN PREVIEW</div>
+            <div class="col q-pa-md scroll markdown-preview" v-html="renderedHtml"></div>
+          </div>
+        </template>
+      </q-splitter>
+    </div>
+  </q-page>
+</template>
+
+<script setup>
+import { ref, computed, watch, reactive } from 'vue';
+import { copyToClipboard as qCopyToClipboard, useQuasar, exportFile } from 'quasar';
+import MarkdownIt from 'markdown-it';
+
+const $q = useQuasar();
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  typographer: true
+});
+
+const rawInput = ref('');
+const cleanedMarkdown = ref('');
+const splitterModel = ref(50);
+
+const options = reactive({
+  stripAnsi: true,
+  stripFrames: true,
+  smartUnwrap: true,
+  formatPrompts: true,
+  stripLineNumbers: true,
+  stripPrompts: false
+});
+
+// Regex for ANSI escape codes (constructed via fromCharCode to bypass ESLint no-control-regex)
+const ansiRegex = new RegExp('[' + String.fromCharCode(27) + String.fromCharCode(155) + '][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]', 'g');
+
+const cleanText = (text) => {
+  if (!text) return '';
+
+  // 1. Normalize line endings
+  let clean = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  
+  if (options.stripAnsi) {
+    clean = clean.replace(ansiRegex, '');
+  }
+
+  // 2. Strip Terminal Frames (the │ characters)
+  if (options.stripFrames) {
+    clean = clean.split('\n').map(line => {
+      // Remove leading/trailing pipes if they seem to be gutter artifacts
+      return line.replace(/^[ \t]*[│┃║][ \t]*/, '').replace(/[ \t]*[│┃║][ \t]*$/, '');
+    }).join('\n');
+  }
+
+  const lines = clean.split('\n');
+  const processedLines = [];
+  
+  let inCodeBlock = false;
+  const promptRegex = /^(\$ |> |[\w.-]+@[\w.-]+[:~][\w./-]*[$#] )/;
+  const lineNumberRegex = /^\s*\d+\s+/; // Matches " 80  ", "80: ", etc.
+
+  // 3. Identify if this is a Code/Diff block
+  const codeSignals = (clean.match(/[{()[\];=<>]/g) || []).length;
+  // Check for diff indicators: line starting with optional number, then + or -
+  const isDiff = lines.some(l => {
+    const trimmed = l.trimStart();
+    return /^(?:\d+\s+)?[+-]\s/.test(trimmed);
+  });
+  const isCode = codeSignals > (lines.length * 0.5); // Heuristic
+
+  // If Smart Unwrap is disabled, we don't need to treat code/prose differently for merging
+  if ((isCode || isDiff) && options.smartUnwrap) {
+    // 4. Handle as Code: Preserve lines, strip gutters
+    const cleanLines = lines.map(line => {
+      let processed = line;
+      if (options.stripLineNumbers) {
+        // Strip line numbers and keep +/- if present
+        processed = processed.replace(/^[ \t]*\d+[ \t]*([-+]?)[ \t]*/, (match, p1) => {
+          return p1 ? p1 + ' ' : '';
+        });
+      }
+      if (options.stripPrompts && promptRegex.test(processed.trimStart())) {
+        processed = processed.replace(promptRegex, '');
+      }
+      return processed;
+    });
+    
+    let lang = isDiff ? 'diff' : 'javascript';
+    if (!isDiff && cleanLines.some(l => promptRegex.test(l.trimStart()))) {
+        lang = 'bash';
+    }
+    return `\`\`\`${lang}\n${cleanLines.join('\n')}\n\`\`\``;
+  }
+
+  // 5. Handle as Prose (Your existing un-wrap logic goes here)
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trimEnd();
+    
+    // Skip completely empty lines if we already have one
+    if (line === '' && processedLines.length > 0 && processedLines[processedLines.length-1] === '') {
+      continue;
+    }
+
+    if (line.startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      processedLines.push(line);
+      continue;
+    }
+
+    if (inCodeBlock) {
+      processedLines.push(line);
+      continue;
+    }
+
+    // Prompt Detection
+    const isPromptLine = promptRegex.test(line.trimStart());
+    if (isPromptLine) {
+      if (options.stripPrompts) {
+        line = line.replace(promptRegex, '');
+      }
+
+      if (options.formatPrompts) {
+        const lastLine = processedLines.length > 0 ? processedLines[processedLines.length-1] : '';
+        if (lastLine === '```') {
+          processedLines.pop(); 
+          processedLines.push(line);
+          processedLines.push('```');
+        } else {
+          processedLines.push('```bash');
+          processedLines.push(line);
+          processedLines.push('```');
+        }
+        continue;
+      }
+    }
+
+    // Intelligence: Don't merge if it looks like code or a diff
+    const isDiffLine = /^[+-] /.test(line.trimStart());
+    const looksLikeCode = /[;{}()[\]]/.test(line) || lineNumberRegex.test(line);
+
+    if (options.smartUnwrap && i < lines.length - 1) {
+      const nextLine = lines[i+1].trimStart();
+      const endsWithSentenceEnder = /[.!?:)\]]$/.test(line.trimEnd());
+      const nextStartsPrompt = promptRegex.test(nextLine);
+      const nextIsEmpty = nextLine === '';
+      const nextIsDiff = /^[+-] /.test(nextLine);
+      const nextIsLineNumber = lineNumberRegex.test(nextLine);
+
+      // CRITICAL: If current or next line looks like code/diff/line-number, DO NOT MERGE
+      if (!isDiffLine && !looksLikeCode && !nextIsDiff && !nextIsLineNumber && 
+          !endsWithSentenceEnder && (!options.formatPrompts || !nextStartsPrompt) && !nextIsEmpty && 
+          (line.length > 40)) {
+        line = line.trimEnd() + ' ' + nextLine.trimStart();
+        i++; 
+        lines[i] = line;
+        i--;
+        continue;
+      }
+    }
+
+    processedLines.push(line);
+  }
+
+  return processedLines.join('\n');
+};
+
+watch([rawInput, options], () => {
+  cleanedMarkdown.value = cleanText(rawInput.value);
+}, { deep: true });
+
+const renderedHtml = computed(() => {
+  return md.render(cleanedMarkdown.value || '_No output yet..._');
+});
+
+const copyToClipboard = async () => {
+  try {
+    await qCopyToClipboard(cleanedMarkdown.value);
+    $q.notify({
+      message: 'Markdown copied to clipboard!',
+      color: 'positive',
+      icon: 'content_paste'
+    });
+  } catch {
+    $q.notify({
+      message: 'Failed to copy',
+      color: 'negative'
+    });
+  }
+};
+
+const downloadMarkdown = () => {
+  const status = exportFile('termtomd.md', cleanedMarkdown.value, 'text/markdown');
+  if (status !== true) {
+    $q.notify({
+      message: 'Browser blocked download',
+      color: 'negative'
+    });
+  }
+};
+
+const clearAll = () => {
+  rawInput.value = '';
+  cleanedMarkdown.value = '';
+};
+</script>
+
+<style lang="scss">
+.custom-textarea {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+
+  .q-field__inner {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .q-field__control, .q-field__control-container {
+    height: 100% !important;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+  }
+  
+  textarea.q-field__native {
+    resize: none !important;
+    height: 100% !important;
+    flex-grow: 1;
+  }
+}
+
+.markdown-preview {
+  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  line-height: 1.6;
+  
+  pre {
+    background: rgba(0,0,0,0.3);
+    padding: 12px;
+    border-radius: 4px;
+    overflow-x: auto;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  
+  code {
+    font-family: 'Fira Code', monospace;
+    background: rgba(255,255,255,0.1);
+    padding: 2px 4px;
+    border-radius: 3px;
+  }
+
+  p {
+    margin-bottom: 1em;
+  }
+}
+
+.border-bottom {
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+</style>
