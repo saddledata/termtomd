@@ -133,17 +133,60 @@
 
         <template v-slot:after>
           <div :class="[$q.dark.isActive ? 'bg-grey-10' : 'bg-grey-2', 'full-height column overflow-hidden']">
-            <div :class="[$q.dark.isActive ? 'bg-grey-9' : 'bg-grey-4', 'row items-center q-pa-none border-bottom']" style="flex-shrink: 0">
+            <div :class="[$q.dark.isActive ? 'bg-grey-9' : 'bg-grey-4', 'row items-center justify-between q-pa-none border-bottom']" style="flex-shrink: 0">
               <q-tabs v-model="rightTab" dense :active-color="$q.dark.isActive ? 'white' : 'primary'" indicator-color="primary" align="left" narrow-indicator :class="$q.dark.isActive ? 'text-grey-5' : 'text-grey-8'" no-caps>
                 <q-tab name="raw" label="Raw MD" />
                 <q-tab name="preview" label="Preview" />
               </q-tabs>
+              
+              <div v-show="rightTab === 'raw'" class="row q-gutter-x-xs q-pr-sm items-center text-grey-6 format-toolbar">
+                <q-btn flat dense round size="sm" icon="format_bold" @click="formatActions.bold">
+                  <q-tooltip>Bold (Ctrl+B)</q-tooltip>
+                </q-btn>
+                <q-btn flat dense round size="sm" icon="format_italic" @click="formatActions.italic">
+                  <q-tooltip>Italic (Ctrl+I)</q-tooltip>
+                </q-btn>
+                <q-btn flat dense round size="sm" icon="strikethrough_s" @click="formatActions.strikethrough">
+                  <q-tooltip>Strikethrough</q-tooltip>
+                </q-btn>
+                <q-separator vertical class="q-mx-xs" />
+                <q-btn flat dense round size="sm" icon="title" @click="formatActions.heading">
+                  <q-tooltip>Heading</q-tooltip>
+                </q-btn>
+                <q-separator vertical class="q-mx-xs" />
+                <q-btn flat dense round size="sm" icon="format_list_bulleted" @click="formatActions.ul">
+                  <q-tooltip>Unordered List</q-tooltip>
+                </q-btn>
+                <q-btn flat dense round size="sm" icon="format_list_numbered" @click="formatActions.ol">
+                  <q-tooltip>Ordered List</q-tooltip>
+                </q-btn>
+                <q-btn flat dense round size="sm" icon="checklist" @click="formatActions.check">
+                  <q-tooltip>Task List</q-tooltip>
+                </q-btn>
+                <q-separator vertical class="q-mx-xs" />
+                <q-btn flat dense round size="sm" icon="format_quote" @click="formatActions.quote">
+                  <q-tooltip>Blockquote</q-tooltip>
+                </q-btn>
+                <q-btn flat dense round size="sm" icon="code" @click="formatActions.code">
+                  <q-tooltip>Code</q-tooltip>
+                </q-btn>
+                <q-btn flat dense round size="sm" icon="table_chart" @click="formatActions.table">
+                  <q-tooltip>Table</q-tooltip>
+                </q-btn>
+                <q-separator vertical class="q-mx-xs" />
+                <q-btn flat dense round size="sm" icon="link" @click="formatActions.link">
+                  <q-tooltip>Link (Ctrl+K)</q-tooltip>
+                </q-btn>
+                <q-btn flat dense round size="sm" icon="image" @click="formatActions.image">
+                  <q-tooltip>Image</q-tooltip>
+                </q-btn>
+              </div>
             </div>
             <q-tab-panels v-model="rightTab" animated class="col bg-transparent overflow-hidden" keep-alive>
               <q-tab-panel name="raw" class="q-pa-none overflow-hidden column">
                 <textarea
-                  readonly
-                  :value="cleanedMarkdown"
+                  ref="rawTextareaRef"
+                  v-model="cleanedMarkdown"
                   :class="[$q.dark.isActive ? 'bg-dark text-white' : 'bg-white text-black', 'col full-width q-pa-md']"
                   style="font-family: monospace; resize: none; outline: none; border: none; white-space: pre-wrap; overflow: auto; min-height: 0;"
                   tabindex="0"
@@ -167,7 +210,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, reactive } from 'vue';
+import { ref, computed, watch, reactive, nextTick } from 'vue';
 import { copyToClipboard as qCopyToClipboard, useQuasar, exportFile } from 'quasar';
 import { marked } from 'marked';
 import { useAppStore } from 'src/stores/app';
@@ -181,6 +224,43 @@ const rawInput = ref('');
 const cleanedMarkdown = ref('');
 const splitterModel = ref(50);
 const rightTab = ref('raw');
+const rawTextareaRef = ref(null);
+
+const applyFormat = (prefix, suffix = '', defaultText = '') => {
+  if (rightTab.value !== 'raw') return;
+  const el = rawTextareaRef.value;
+  if (!el) return;
+
+  const start = el.selectionStart;
+  const end = el.selectionEnd;
+  const text = cleanedMarkdown.value;
+  
+  const selectedText = text.substring(start, end) || defaultText;
+  const before = text.substring(0, start);
+  const after = text.substring(end);
+
+  cleanedMarkdown.value = before + prefix + selectedText + suffix + after;
+
+  nextTick(() => {
+    el.focus();
+    el.setSelectionRange(start + prefix.length, start + prefix.length + selectedText.length);
+  });
+};
+
+const formatActions = {
+  bold: () => applyFormat('**', '**', 'bold text'),
+  italic: () => applyFormat('*', '*', 'italic text'),
+  strikethrough: () => applyFormat('~~', '~~', 'strikethrough text'),
+  heading: () => applyFormat('## ', '', 'Heading'),
+  ul: () => applyFormat('- ', '', 'List item'),
+  ol: () => applyFormat('1. ', '', 'List item'),
+  check: () => applyFormat('- [ ] ', '', 'Task'),
+  quote: () => applyFormat('> ', '', 'Quote'),
+  code: () => applyFormat('`', '`', 'code'),
+  table: () => applyFormat('\n| Column 1 | Column 2 |\n|---|---|\n| Value 1 | Value 2 |\n', '', ''),
+  link: () => applyFormat('[', '](url)', 'link text'),
+  image: () => applyFormat('![', '](image-url)', 'alt text')
+};
 
 const renderedHtml = computed(() => {
   return marked.parse(cleanedMarkdown.value || '_No output yet..._');
@@ -372,16 +452,30 @@ watch([rawInput, options], () => {
 }, { deep: true });
 
 const handlePreviewKeydown = (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-    e.preventDefault();
-    if (e.target.tagName.toLowerCase() === 'textarea') {
-      e.target.select();
-    } else {
-      const selection = window.getSelection();
-      const range = document.createRange();
-      range.selectNode(e.currentTarget.firstElementChild || e.currentTarget);
-      selection.removeAllRanges();
-      selection.addRange(range);
+  if (e.ctrlKey || e.metaKey) {
+    const key = e.key.toLowerCase();
+    if (key === 'a') {
+      e.preventDefault();
+      if (e.target.tagName.toLowerCase() === 'textarea') {
+        e.target.select();
+      } else {
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNode(e.currentTarget.firstElementChild || e.currentTarget);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    } else if (e.target.tagName.toLowerCase() === 'textarea') {
+      if (key === 'b') {
+        e.preventDefault();
+        formatActions.bold();
+      } else if (key === 'i') {
+        e.preventDefault();
+        formatActions.italic();
+      } else if (key === 'k') {
+        e.preventDefault();
+        formatActions.link();
+      }
     }
   }
 };
