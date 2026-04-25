@@ -49,7 +49,7 @@
               <code>*text*</code>
             </div>
             <div>
-              <strike>Strikethrough</strike><br>
+              <del>Strikethrough</del><br>
               <code>~~text~~</code>
             </div>
             <div>

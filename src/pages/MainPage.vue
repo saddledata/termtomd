@@ -25,6 +25,15 @@
                 </q-item>
                 <q-item tag="label" v-ripple>
                   <q-item-section>
+                    <q-item-label>Strip Session Noise</q-item-label>
+                    <q-item-label caption class="text-grey-5">Remove "Last login" headers</q-item-label>
+                  </q-item-section>
+                  <q-item-section side>
+                    <q-toggle v-model="options.stripNoise" color="primary" />
+                  </q-item-section>
+                </q-item>
+                <q-item tag="label" v-ripple>
+                  <q-item-section>
                     <q-item-label>Strip Terminal Frames</q-item-label>
                     <q-item-label caption class="text-grey-5">Remove vertical bars (│)</q-item-label>
                   </q-item-section>
@@ -202,6 +211,7 @@ const readingTime = computed(() => {
 
 const options = reactive({
   stripAnsi: true,
+  stripNoise: true,
   stripFrames: true,
   trimWhitespace: true,
   smartUnwrap: true,
@@ -213,6 +223,9 @@ const options = reactive({
 // Regex for ANSI escape codes (constructed via fromCharCode to bypass ESLint no-control-regex)
 const ansiRegex = new RegExp('[' + String.fromCharCode(27) + String.fromCharCode(155) + '][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]', 'g');
 
+// Zsh/Bash prompts, handling arrows like ➜ or ❯, standard $, >, #, or user@machine
+const promptRegex = /^(\$ |> |# |[➜❯]\s+(?:[\w./~-]+\s+)?|[\w.-]+@[\w.-]+:.*?[#$]\s+)/;
+
 const cleanText = (text) => {
   if (!text) return '';
 
@@ -221,6 +234,12 @@ const cleanText = (text) => {
   
   if (options.stripAnsi) {
     clean = clean.replace(ansiRegex, '');
+  }
+
+  // 1.5 Strip Terminal Noise
+  if (options.stripNoise) {
+    const noiseRegex = /^(?:Last login:|Welcome to .*|.*zsh: command not found:).*$/gm;
+    clean = clean.replace(noiseRegex, '');
   }
 
   // 2. Strip Terminal Frames (the │ characters)
@@ -235,7 +254,6 @@ const cleanText = (text) => {
   const processedLines = [];
   
   let inCodeBlock = false;
-  const promptRegex = /^(\$ |> |[\w.-]+@[\w.-]+[:~][\w./-]*[$#] )/;
   const lineNumberRegex = /^\s*\d+\s+/; // Matches " 80  ", "80: ", etc.
 
   // 3. Identify if this is a Code/Diff block
