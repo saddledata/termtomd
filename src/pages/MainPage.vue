@@ -50,15 +50,6 @@
                 </q-item>
                 <q-item tag="label" v-ripple>
                   <q-item-section>
-                    <q-item-label>Trim Whitespace</q-item-label>
-                    <q-item-label caption class="text-grey-5">Remove leading spaces from prose</q-item-label>
-                  </q-item-section>
-                  <q-item-section side>
-                    <q-toggle v-model="options.trimWhitespace" color="primary" />
-                  </q-item-section>
-                </q-item>
-                <q-item tag="label" v-ripple>
-                  <q-item-section>
                     <q-item-label>Format Prompts</q-item-label>
                     <q-item-label caption class="text-grey-5">Wrap commands in code blocks</q-item-label>
                   </q-item-section>
