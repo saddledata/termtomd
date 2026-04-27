@@ -100,7 +100,10 @@
               <q-item>
                 <q-item-section>
                   <q-item-label>
-                    <ul class="q-pl-md q-my-none"><li>Item 1</li><li>Item 2</li></ul>
+                    <ul class="q-pl-md q-my-none">
+                      <li>Item 1</li>
+                      <li>Item 2</li>
+                    </ul>
                   </q-item-label>
                 </q-item-section>
                 <q-item-section>
@@ -110,7 +113,10 @@
               <q-item>
                 <q-item-section>
                   <q-item-label>
-                    <ol class="q-pl-md q-my-none"><li>Item 1</li><li>Item 2</li></ol>
+                    <ol class="q-pl-md q-my-none">
+                      <li>Item 1</li>
+                      <li>Item 2</li>
+                    </ol>
                   </q-item-label>
                 </q-item-section>
                 <q-item-section>
@@ -140,7 +146,9 @@
               </q-item>
               <q-item>
                 <q-item-section>
-                  <q-item-label><pre class="q-ma-none">Code<br>Block</pre></q-item-label>
+                  <q-item-label>
+                    <pre class="q-ma-none">Code<br>Block</pre>
+                  </q-item-label>
                 </q-item-section>
                 <q-item-section>
                   <q-item-label><code>```bash<br>Code<br>Block<br>```</code></q-item-label>
@@ -205,22 +213,103 @@
         <div>Brought to you by the team at <a href="https://saddledata.com" target="_blank" class="text-primary"
             style="text-decoration: none;">saddledata.com</a></div>
         <q-separator vertical inset />
-        <a href="https://github.com/saddledata/termtomd" target="_blank" :class="$q.dark.isActive ? 'text-grey-5' : 'text-grey-7'" style="text-decoration: none;">
-          <q-icon name="img:https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/github.svg" size="xs" class="q-mr-xs" :style="$q.dark.isActive ? 'filter: invert(1)' : ''" />
+        <a href="https://github.com/saddledata/termtomd" target="_blank"
+          :class="$q.dark.isActive ? 'text-grey-5' : 'text-grey-7'" style="text-decoration: none;">
+          <q-icon name="img:https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/github.svg" size="xs" class="q-mr-xs"
+            :style="$q.dark.isActive ? 'filter: invert(1)' : ''" />
           GitHub
         </a>
+        <q-separator vertical inset />
+        <q-btn flat dense no-caps size="sm" color="primary" label="Feedback" @click="showFeedback = true" />
       </div>
     </q-footer>
+
+    <q-dialog v-model="showFeedback">
+      <q-card style="min-width: 350px" :class="$q.dark.isActive ? 'bg-grey-10 text-white' : 'bg-white text-black'">
+        <q-card-section class="row items-center">
+          <div class="text-h6">Send Feedback</div>
+          <q-space />
+          <q-btn icon="close" flat round dense v-close-popup />
+        </q-card-section>
+
+        <q-form @submit="submitFeedback">
+          <q-card-section class="q-gutter-y-md">
+            <q-input v-model="feedbackForm.name" label="Name" dense outlined required :dark="$q.dark.isActive" />
+            <q-input v-model="feedbackForm.email" label="Email" type="email" dense outlined required
+              :dark="$q.dark.isActive" />
+            <q-input v-model="feedbackForm.message" label="Message" type="textarea" dense outlined required
+              :dark="$q.dark.isActive" />
+          </q-card-section>
+
+          <q-card-actions align="right" class="q-pb-md q-pr-md">
+            <q-btn flat label="Cancel" color="grey" v-close-popup />
+            <q-btn type="submit" color="primary" label="Submit" :loading="submitting" />
+          </q-card-actions>
+        </q-form>
+      </q-card>
+    </q-dialog>
   </q-layout>
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import { useQuasar } from 'quasar'
 import { useAppStore } from 'src/stores/app'
 
 const $q = useQuasar()
 const appStore = useAppStore()
+
+const showFeedback = ref(false)
+const submitting = ref(false)
+const feedbackForm = reactive({
+  name: '',
+  email: '',
+  message: ''
+})
+
+const submitFeedback = async () => {
+  submitting.value = true
+
+  const formData = new FormData()
+  formData.append("access_key", "6e750e35-3a4e-4a8c-8502-9614b4fd21fe")
+  formData.append("name", feedbackForm.name)
+  formData.append("email", feedbackForm.email)
+  formData.append("message", feedbackForm.message)
+  formData.append("subject", "TermToMD Feedback")
+
+  try {
+    const response = await fetch("https://api.web3forms.com/submit", {
+      method: "POST",
+      body: formData
+    })
+
+    const data = await response.json()
+
+    if (response.ok) {
+      $q.notify({
+        color: 'positive',
+        message: 'Feedback sent successfully!',
+        icon: 'check'
+      })
+      showFeedback.value = false
+      feedbackForm.name = ''
+      feedbackForm.email = ''
+      feedbackForm.message = ''
+    } else {
+      $q.notify({
+        color: 'negative',
+        message: 'Error: ' + (data.message || 'Could not send feedback')
+      })
+    }
+  } catch {
+    $q.notify({
+      color: 'negative',
+      message: 'Something went wrong. Please try again.'
+    })
+  } finally {
+    submitting.value = false
+  }
+}
 
 onMounted(() => {
   $q.dark.set(true)
