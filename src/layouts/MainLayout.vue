@@ -201,8 +201,15 @@
 
     <q-footer :class="$q.dark.isActive ? 'bg-dark text-grey-5' : 'bg-white text-grey-7'" class="text-center q-pa-sm"
       style="border-top: 1px solid rgba(128,128,128,0.2)">
-      <div>Brought to you by the team at <a href="https://saddledata.com" target="_blank" class="text-primary"
-          style="text-decoration: none;">saddledata.com</a></div>
+      <div class="row items-center justify-center q-gutter-x-md">
+        <div>Brought to you by the team at <a href="https://saddledata.com" target="_blank" class="text-primary"
+            style="text-decoration: none;">saddledata.com</a></div>
+        <q-separator vertical inset />
+        <a href="https://github.com/saddledata/termtomd" target="_blank" :class="$q.dark.isActive ? 'text-grey-5' : 'text-grey-7'" style="text-decoration: none;">
+          <q-icon name="img:https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/github.svg" size="xs" class="q-mr-xs" :style="$q.dark.isActive ? 'filter: invert(1)' : ''" />
+          GitHub
+        </a>
+      </div>
     </q-footer>
   </q-layout>
 </template>
